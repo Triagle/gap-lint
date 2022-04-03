@@ -17,16 +17,6 @@ data Options = Options
 cli :: ParserInfo Options
 cli = info (Options <$> argument str (metavar "FILE")) (fullDesc <> progDesc "Check GAP files for syntax errors.")
 
--- printParsecError :: PE.ParseError -> IO ()
--- printParsecError err = print
-
--- where
---   pos = errorPos err
---   line = sourceLine pos
---   col = sourceColumn pos
---   name = sourceName pos
---   message = showErrorMessages "or" "unkown parse error" "expecting" "unexpected String" String ([Message])
-
 main :: IO ()
 main = do
   opts <- execParser cli
