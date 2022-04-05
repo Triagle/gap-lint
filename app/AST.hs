@@ -33,26 +33,32 @@ variable =
     checkReserved varName = when (varName `elem` reservedKeywords) $ fail ("Variable name \"" <> varName <> "\" is a reserved keyword.")
     reservedKeywords = ["Assert", "Info", "IsBound", "QUIT", "TryNextMethod", "Unbind", "and", "atomic", "break", "continue", "do", "elif", "else", "end", "false", "fi", "for", "function", "if", "in ", "local", "mod", "not", "od", "or", "quit", "readonly", "readwrite", "rec", "repeat", "return", "then", "true", "until", "while"]
 
+stoken :: String -> Parser ()
+stoken t = void $ spaces >> string t >> spaces
+
 recordAccess :: Parser ()
-recordAccess = void $ sepBy1 variable (try $ char '.' >> spaces >> char '.') >> optional (try $ between (spaces >> char '[' >> spaces) (spaces >> char ']' >> spaces) intLit)
+recordAccess = void $ sepBy1 variable (try $ stoken ".") >> optional (try $ between (stoken "[") (stoken "]") expression)
 
 commaSep :: Parser () -> Parser ()
-commaSep p = void $ sepBy p (spaces >> char ',' >> spaces)
+commaSep p = void $ sepBy p (stoken ",")
 
 lambda :: Parser ()
-lambda = void $ variable >> spaces >> string "->" >> spaces >> expression
+lambda = void $ variable >> stoken "->" >> expression
+
+bracketList :: Parser () -> Parser ()
+bracketList p = stoken "(" >> commaSep p >> stoken ")"
 
 functionCall :: Parser ()
-functionCall = void $ variable >> spaces >> char '(' >> sepBy expression (spaces >> char ',' >> spaces) >> char ')'
+functionCall = void $ variable >> bracketList expression
 
 permutation :: Parser ()
-permutation = void . many1 $ spaces >> char '(' >> sepBy expression (spaces >> char ',' >> spaces) >> char ')' >> spaces
+permutation = void . many1 $ bracketList expression
 
 record :: Parser ()
-record = void $ string "rec" >> spaces >> char '(' >> spaces >> sepBy1 assignment (spaces >> char ',' >> spaces) >> spaces >> char ')'
+record = void $ stoken "rec" >> bracketList assignment
 
 list :: Parser ()
-list = void $ between (char '[') (char ']') (sepBy expression (spaces >> char ',' >> spaces))
+list = void $ between (stoken "[") (stoken "]") (sepBy expression (stoken ","))
 
 binOp :: Parser ()
 binOp = void $ chainl1 (try binOpExpression) (try op >> return (const $ const ()))
@@ -60,15 +66,15 @@ binOp = void $ chainl1 (try binOpExpression) (try op >> return (const $ const ()
     op = spaces >> choice (map (try . string) [">=", "<=", "=", "<>", "<", ">", "in", "+", "-", "/", "mod", "^", "and", "*", "or"]) >> spaces
 
 bracketedExpr :: Parser ()
-bracketedExpr = between (char '(') (char ')') expression
+bracketedExpr = between (stoken "(") (stoken ")") expression
 
 binOpExpression :: Parser ()
 binOpExpression = choice (map try [lit, lambda, functionCall, permutation, record, list, recordAccess, bracketedExpr])
 
 functionDef :: Parser ()
-functionDef = void $ string "function" >> between (spaces >> char '(' >> spaces) (spaces >> char ')' >> spaces) (commaSep variable) >> optional (try localDeclare) >> spaces >> functionStatements >> spaces >> string "end"
+functionDef = void $ stoken "function" >> bracketList variable >> optional (try localDeclare) >> spaces >> functionStatements >> stoken "end"
   where
-    localDeclare = spaces >> string "local" >> spaces >> commaSep variable >> spaces >> many (char ';')
+    localDeclare = stoken "local" >> commaSep variable >> spaces >> many (char ';')
 
 expression = choice (map try [binOp, functionDef, lambda, lit, recordAccess, functionCall, permutation, record, list])
 
@@ -76,25 +82,25 @@ loopStatements :: Parser ()
 loopStatements = void $ many (try loopStatement)
 
 comment :: Parser ()
-comment = void $ spaces >> char '#' >> spaces >> manyTill anyChar (try $ void (char '\n') <|> eof)
+comment = void $ stoken "#" >> manyTill anyChar (try $ void (char '\n') <|> eof)
 
 assignment :: Parser ()
-assignment = void $ variable >> spaces >> string ":=" >> spaces >> expression
+assignment = void $ variable >> stoken ":=" >> expression
 
 for :: Parser ()
-for = void $ string "for" >> spaces >> variable >> spaces >> string "in" >> spaces >> expression >> spaces >> string "do" >> spaces >> statements >> spaces >> string "od"
+for = void $ stoken "for" >> variable >> stoken "in" >> expression >> stoken "do" >> statements >> stoken "od"
 
 while :: Parser ()
-while = void $ string "while" >> spaces >> expression >> spaces >> string "do" >> spaces >> loopStatements >> spaces >> string "od"
+while = void $ stoken "while" >> expression >> stoken "do" >> loopStatements >> stoken "od"
 
 repeatStmt :: Parser ()
-repeatStmt = void $ string "repeat" >> spaces >> loopStatements >> spaces >> string "until" >> spaces >> expression
+repeatStmt = void $ stoken "repeat" >> loopStatements >> stoken "until" >> expression
 
 ifStmt :: Parser ()
-ifStmt = void . (<?> "if statement") $ string "if" >> spaces >> expression >> spaces >> string "then" >> spaces >> statements >> many (try elif) >> optional (try elseStmt) >> spaces >> string "fi"
+ifStmt = void . (<?> "if statement") $ stoken "if" >> expression >> stoken "then" >> statements >> many (try elif) >> optional (try elseStmt) >> stoken "fi"
   where
-    elif = spaces >> string "elif" >> spaces >> expression >> spaces >> string "then" >> spaces >> statements
-    elseStmt = spaces >> string "else" >> spaces >> statements
+    elif = stoken "elif" >> expression >> stoken "then" >> statements
+    elseStmt = stoken "else" >> statements
 
 statement :: Parser ()
 statement = ((<?> "statement") . choice) $ map (try . (\p -> spaces >> p >> spaces >> many1 (char ';') >> spaces)) [ifStmt, expression, assignment, for, while, repeatStmt] <> [try comment]
@@ -112,10 +118,10 @@ statements :: Parser ()
 statements = void $ many (try statement)
 
 returnStmt :: Parser ()
-returnStmt = string "return" >> spaces >> expression
+returnStmt = stoken "return" >> expression
 
 breakStmt :: Parser ()
-breakStmt = void $ string "break"
+breakStmt = void $ stoken "break"
 
 continue :: Parser ()
-continue = void $ string "continue"
+continue = void $ stoken "continue"
