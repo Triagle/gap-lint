@@ -38,4 +38,4 @@ main = do
   case res of
     Left err -> do
       putStrLn . replaceNl . show $ err
-    Right () -> return ()
+    Right _ -> return ()
